@@ -153,9 +153,9 @@ bool File::write_lines(const Red::DynArray<Red::CString>& p_lines,
     return false;
   }
 
-  for (uint32_t i = 0; i < p_lines.size; i++) {
+  for (uint32_t i = 0; i < p_lines.Size(); i++) {
     stream << p_lines[i].c_str();
-    if (i + 1 < p_lines.size) {
+    if (i + 1 < p_lines.Size()) {
       stream << '\n';
     }
   }
