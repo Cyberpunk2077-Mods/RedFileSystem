@@ -546,4 +546,4 @@ release.
 [RedData]: https://github.com/rayshader/cp2077-red-data
 [examples/]: https://github.com/rayshader/cp2077-red-filesystem/tree/master/examples
 [branch api]: https://github.com/rayshader/cp2077-red-filesystem/tree/api
-[red-cli]: https://github.com/rayshader/cp2077-red-cli/releases/latest
+[red-cli]: https://github.com/Cyberpunk2077-Mods/RedCli/releases/latest

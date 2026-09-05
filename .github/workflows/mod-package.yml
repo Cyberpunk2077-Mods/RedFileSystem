@@ -11,6 +11,8 @@ env:
   TARGET_ARCH: x64
   # Reserved, disabled targets: windows_arm, macos_x64, macos_arm, linux_x64, linux_arm.
   MOD_NAME: RedFileSystem
+  # red-cli currently requires a game path even for `pack`; CI has no game install.
+  REDCLI_GAME: ${{ github.workspace }}/.ci/Cyberpunk2077
 jobs:
   package:
     runs-on: windows-2025
@@ -26,17 +28,67 @@ jobs:
           $config = Get-Content red.config.json -Raw | ConvertFrom-Json
           $config.version = $env:GITHUB_REF_NAME.TrimStart('v')
           $config | ConvertTo-Json -Depth 20 | Set-Content red.config.json
-      - name: Install red-cli
+      - name: Resolve red-cli release
+        id: redcli
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $($env:GH_TOKEN)"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          # Org fork of red-cli (was rayshader/cp2077-red-cli).
+          # Use a literal URI — "$api?..." breaks under pwsh (? parsing).
+          $uri = "https://api.github.com/repos/Cyberpunk2077-Mods/RedCli/releases?per_page=20"
+          $releases = @(Invoke-RestMethod -Method Get -Uri $uri -Headers $headers)
+          if (-not $releases) { throw "No releases found on Cyberpunk2077-Mods/RedCli (publish a windows_x64 package first)" }
+          $chosen = $null
+          $asset = $null
+          foreach ($release in $releases) {
+            $asset = @($release.assets) | Where-Object { $_.name -match '^RedCli_v.+_windows_x64\.zip$' } | Select-Object -First 1
+            if (-not $asset) {
+              $asset = @($release.assets) | Where-Object { $_.name -match '(?i)(windows|win64|msvc).*\.zip$' } | Select-Object -First 1
+            }
+            if ($asset) { $chosen = $release; break }
+          }
+          if (-not $asset) { throw "No Windows red-cli zip on Cyberpunk2077-Mods/RedCli releases" }
+          "tag=$($chosen.tag_name)" >> $env:GITHUB_OUTPUT
+          "url=$($asset.browser_download_url)" >> $env:GITHUB_OUTPUT
+          "name=$($asset.name)" >> $env:GITHUB_OUTPUT
+          Write-Host "Using red-cli $($chosen.tag_name) / $($asset.name)"
+
+      - uses: actions/cache@v4
+        id: redcli-cache
+        with:
+          path: tools/red-cli
+          key: red-cli-${{ steps.redcli.outputs.tag }}-${{ steps.redcli.outputs.name }}
+
+      - name: Download red-cli
+        if: steps.redcli-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          REDCLI_URL: ${{ steps.redcli.outputs.url }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:REDCLI_URL)) { throw "REDCLI_URL is empty" }
+          New-Item -ItemType Directory -Force -Path tools/red-cli | Out-Null
+          # browser_download_url is a public CDN/GitHub release URL; do not send API Accept headers.
+          Invoke-WebRequest -Uri $env:REDCLI_URL -OutFile red-cli.zip
+          Expand-Archive red-cli.zip tools/red-cli -Force
+          Remove-Item red-cli.zip -Force
+
+      - name: Add red-cli to PATH
         shell: pwsh
         run: |
-          $release = Invoke-RestMethod https://api.github.com/repos/rayshader/cp2077-red-cli/releases/latest
-          $asset = $release.assets | Where-Object { $_.name -match '(windows|win64|msvc).*\.zip$' } | Select-Object -First 1
-          if (-not $asset) { throw "No Windows red-cli release asset found" }
-          Invoke-WebRequest $asset.browser_download_url -OutFile red-cli.zip
-          Expand-Archive red-cli.zip tools/red-cli
           $exe = Get-ChildItem tools/red-cli -Recurse -Filter red-cli.exe | Select-Object -First 1
-          if (-not $exe) { throw "red-cli.exe was not found in the release archive" }
+          if (-not $exe) { throw "red-cli.exe was not found under tools/red-cli" }
           $exe.Directory.FullName >> $env:GITHUB_PATH
+
+      - name: Prepare stub game dir for red-cli
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path $env:REDCLI_GAME | Out-Null
+
       - name: Build windows_x64 and create upstream package
         run: |
           cmake -S . -B build -A x64
@@ -48,8 +100,12 @@ jobs:
           $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { $stable = @(git tag -l --sort=-v:refname | Where-Object { $_ -match '^v?\d+\.\d+\.\d+$' }); $any = @(git tag -l --sort=-v:refname | Where-Object { $_ -match '^v?\d' }); $tag = $(@($stable + $any) | Select-Object -First 1); if ($tag) { $tag.TrimStart('v') } else { '0.0.0' } }
           $suffix = if ($env:GITHUB_REF_TYPE -eq 'tag') { '' } else { "_$(Get-Date -Format 'yyyy.M').$((git rev-list --count --since="$(Get-Date -Day 1 -Format yyyy-MM-dd)" HEAD))" }
           $artifact = "${env:MOD_NAME}_v${version}_${env:TARGET_PLATFORM}_${env:TARGET_ARCH}${suffix}.zip"
-          $source = Get-ChildItem dist -Recurse -Filter *.zip | Select-Object -First 1
-          if (-not $source) { throw "red-cli pack did not produce a zip" }
+          # red-cli pack writes "<name>-<version>.zip" to the project root (not dist/).
+          $source = Get-ChildItem -Path . -File -Filter "${env:MOD_NAME}-*.zip" | Select-Object -First 1
+          if (-not $source) {
+            $source = Get-ChildItem -Path dist -Recurse -File -Filter *.zip -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $source) { throw "red-cli pack did not produce a zip (expected ${env:MOD_NAME}-*.zip in repo root)" }
           Move-Item -LiteralPath $source.FullName -Destination $artifact -Force
           "artifact=$artifact" >> $env:GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
