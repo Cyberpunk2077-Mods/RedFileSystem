@@ -9,5 +9,5 @@
 	url = https://github.com/Cyberpunk2077-Mods/RedTest.git
 [submodule "deps/RedData"]
 	path = deps/RedData
-	url = https://github.com/rayshader/cp2077-red-data
+	url = https://github.com/Cyberpunk2077-Mods/RedData.git
 	branch = api
