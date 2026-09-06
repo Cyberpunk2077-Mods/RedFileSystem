@@ -51,24 +51,20 @@ add_compile_definitions(
         _UNICODE
 )
 
-# RedData provides the same RED4ext.SDK and RedLib revisions as this project.
-# Let it create the shared CMake targets once to avoid duplicate target errors.
+# RedData release tags contain the runtime plugin, not its header-only API.
+# Build against the API adapter; the game loads the RedData plugin separately.
 option(RED4EXT_HEADER_ONLY "" ON)
 add_compile_definitions(NOMINMAX)
-add_subdirectory(deps/RedData)
-set_target_properties(RED4ext.SDK RedLib RedData PROPERTIES FOLDER "Dependencies")
-# RedData's release hook runs from its source directory and reads
-# plugin.release = build/Release from red.config.json. Match that layout when
-# RedData is built as a subproject so red-cli can find RedData.dll.
-set_target_properties(RedData PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/deps/RedData/build"
-)
+add_subdirectory(deps/RED4ext.SDK)
+add_subdirectory(deps/RedLib)
+add_subdirectory(deps/RedDataApi)
+set_target_properties(RED4ext.SDK RedLib RedDataApi PROPERTIES FOLDER "Dependencies")
 mark_as_advanced(RED4EXT_BUILD_EXAMPLES RED4EXT_HEADER_ONLY)
 
 target_link_libraries(RedFileSystem PRIVATE
         RED4ext::SDK
         RedLib
-        RedData
+        RedDataApi
 )
 
 ## Debug mode: install scripts (+ tests) and plugin in game folder.
