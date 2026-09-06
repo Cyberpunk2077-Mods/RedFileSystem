@@ -57,6 +57,12 @@ option(RED4EXT_HEADER_ONLY "" ON)
 add_compile_definitions(NOMINMAX)
 add_subdirectory(deps/RedData)
 set_target_properties(RED4ext.SDK RedLib RedData PROPERTIES FOLDER "Dependencies")
+# RedData's release hook runs from its source directory and reads
+# plugin.release = build/Release from red.config.json. Match that layout when
+# RedData is built as a subproject so red-cli can find RedData.dll.
+set_target_properties(RedData PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/deps/RedData/build"
+)
 mark_as_advanced(RED4EXT_BUILD_EXAMPLES RED4EXT_HEADER_ONLY)
 
 target_link_libraries(RedFileSystem PRIVATE
