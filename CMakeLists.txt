@@ -51,23 +51,13 @@ add_compile_definitions(
         _UNICODE
 )
 
-## Library RED4ext.SDK
+# RedData provides the same RED4ext.SDK and RedLib revisions as this project.
+# Let it create the shared CMake targets once to avoid duplicate target errors.
 option(RED4EXT_HEADER_ONLY "" ON)
-add_subdirectory(deps/RED4ext.SDK)
-set_target_properties(RED4ext.SDK PROPERTIES FOLDER "Dependencies")
-mark_as_advanced(RED4EXT_BUILD_EXAMPLES RED4EXT_HEADER_ONLY)
-##
-
-## Library RedLib
 add_compile_definitions(NOMINMAX)
-add_subdirectory(deps/RedLib)
-set_target_properties(RedLib PROPERTIES FOLDER "Dependencies")
-##
-
-## Library RedData
 add_subdirectory(deps/RedData)
-set_target_properties(RedData PROPERTIES FOLDER "Dependencies")
-##
+set_target_properties(RED4ext.SDK RedLib RedData PROPERTIES FOLDER "Dependencies")
+mark_as_advanced(RED4EXT_BUILD_EXAMPLES RED4EXT_HEADER_ONLY)
 
 target_link_libraries(RedFileSystem PRIVATE
         RED4ext::SDK
